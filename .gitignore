@@ -1,0 +1,29 @@
+# -- project outputs --
+bad_apple_vid/audio.mp3
+bad_apple_vid/vid.mp4
+checkpoints/badapple_nn.pt
+data/frames.npy
+bad_apple_vid/extracted_frames/
+train_outputs/
+
+# -- python junk --
+__pycache__/
+*.pyc
+*.pyo
+.eggs/
+*.egg-info/
+dist/
+build/
+
+# -- env stuff --
+.env
+venv/
+.venv/
+
+# -- editor / os --
+.vscode/
+.idea/
+*.swp
+*~
+Thumbs.db
+.DS_Store

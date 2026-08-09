@@ -1,0 +1,14 @@
+# core
+torch>=2.0
+numpy
+
+# video extraction
+opencv-python
+
+# web server
+fastapi
+uvicorn[standard]
+websockets
+
+# evaluation metrics
+scikit-image
