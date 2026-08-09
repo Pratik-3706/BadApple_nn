@@ -33,3 +33,6 @@ Thumbs.db
 checkpoints/hf_ckp/
 
 clean_ckpt.py
+
+check_losses.py
+hf_readme.md
