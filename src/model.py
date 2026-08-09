@@ -59,13 +59,13 @@ class SineMLP(nn.Module):
     Input:  (t, x, y) — 3 values, all in [-1, 1]
     Output: pixel brightness — 1 value in [0, 1]
 
-    Default config (5 layers, 256 wide) gives ~400-800K params.
+    Default config (5 layers, 256 wide) gives ~264K params.
     That's small enough to run inference at 30fps on an RTX 2050
     while still capturing enough detail for a watchable video.
     """
 
     def __init__(self, in_features=3, out_features=1,
-                 hidden_features=512, hidden_layers=7, omega_0=60.0):
+                 hidden_features=256, hidden_layers=5, omega_0=30.0):
         super().__init__()
 
         self.hidden_features = hidden_features
