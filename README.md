@@ -4,9 +4,9 @@ A neural network that memorizes the entire Bad Apple music video and regenerates
 You give it a coordinate. It gives you a pixel. Do that 172,800 times and you get a frame. Do *that* 6,585 times and you get the whole video. The entire 3:39 music video lives inside a ~4.2MB file.
 ---
 
-> [!NOTE]  
-> **Pre-trained weights are now available!** You can download the trained model checkpoint directly from Hugging Face and run the web player instantly.
-> - **Hugging Face Model:** [Pratik-3706/bad_epoch](https://huggingface.co/Pratik-3706/bad_epoch)
+[![Hugging Face Models](https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Models-blue?style=for-the-badge)](https://huggingface.co/Pratik-3706/bad_epoch)
+
+Download the pre-trained neural network weights instantly from Hugging Face and run the web player without training it yourself!
 
 ## License & Copyright
 - **The Code**: All original code in this repository is released under the **MIT License**.

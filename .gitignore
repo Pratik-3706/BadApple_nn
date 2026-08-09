@@ -1,8 +1,7 @@
 # -- project outputs --
 bad_apple_vid/audio.mp3
 bad_apple_vid/vid.mp4
-checkpoints/badapple_nn.pt
-checkpoints/badapple_nn_latest.pt
+checkpoints/*.pt
 data/frames.npy
 bad_apple_vid/extracted_frames/*.png
 train_outputs/

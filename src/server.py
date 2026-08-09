@@ -45,6 +45,8 @@ app = FastAPI(title="BadApple_X_NN")
 # the latest checkpoint may not exist if training hasn't saved one yet.
 engine_best = None
 engine_latest = None
+best_filename = "badapple_nn.pt"
+latest_filename = "badapple_nn_latest.pt"
 
 
 def _checkpoint_path(name):
@@ -53,18 +55,34 @@ def _checkpoint_path(name):
 
 @app.on_event("startup")
 async def startup():
-    global engine_best, engine_latest
+    global engine_best, engine_latest, best_filename, latest_filename
+    import glob
 
-    best_path = _checkpoint_path('badapple_nn.pt')
-    latest_path = _checkpoint_path('badapple_nn_latest.pt')
+    # auto-detect HF downloaded files or fallback to default
+    best_files = glob.glob(os.path.join(CHECKPOINT_DIR, '*_previous_best.pt'))
+    if best_files:
+        best_path = best_files[0]
+        best_filename = os.path.basename(best_path)
+    else:
+        best_path = _checkpoint_path('badapple_nn.pt')
+        
+    latest_files = glob.glob(os.path.join(CHECKPOINT_DIR, '*_latest.pt'))
+    if latest_files:
+        latest_path = latest_files[0]
+        latest_filename = os.path.basename(latest_path)
+    else:
+        latest_path = _checkpoint_path('badapple_nn_latest.pt')
 
-    # always load best
-    print("loading best checkpoint...")
-    engine_best = InferenceEngine(checkpoint_path=best_path)
+    # always load best (if it exists)
+    if os.path.exists(best_path):
+        print(f"loading best checkpoint: {best_filename}...")
+        engine_best = InferenceEngine(checkpoint_path=best_path)
+    else:
+        print("no best checkpoint found in directory!")
 
     # try loading latest too - it might not exist yet
     if os.path.exists(latest_path):
-        print("loading latest checkpoint...")
+        print(f"loading latest checkpoint: {latest_filename}...")
         engine_latest = InferenceEngine(checkpoint_path=latest_path)
     else:
         print("no latest checkpoint found, comparison mode will use best for both")
@@ -103,11 +121,11 @@ async def checkpoint_info():
     info = {
         'best': {
             'available': engine_best is not None,
-            'label': 'Best (lowest loss)',
+            'label': f'Best ({best_filename})' if engine_best else 'Best (Not Found)',
         },
         'latest': {
             'available': engine_latest is not None,
-            'label': 'Latest (most recent)',
+            'label': f'Latest ({latest_filename})' if engine_latest else 'Latest (Not Found)',
         },
     }
     return JSONResponse(info)
