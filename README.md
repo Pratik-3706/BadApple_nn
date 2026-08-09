@@ -8,9 +8,9 @@ You give it a coordinate. It gives you a pixel. Do that 172,800 times and you ge
 > **Pre-trained weights are now available!** You can download the trained model checkpoint directly from Hugging Face and run the web player instantly.
 > - **Hugging Face Model:** [Pratik-3706/bad_epoch](https://huggingface.co/Pratik-3706/bad_epoch)
 
-## License
-The code in this repository is released under the **MIT License**. The model weights on Hugging Face are released under the same license.
-
+## License & Copyright
+- **The Code**: All original code in this repository is released under the **MIT License**.
+- **The Model & Assets**: The "Bad Apple!!" video, audio, and the neural network weights (which are a derivative mathematical representation of the video) do **not** belong to me. They are the intellectual property of ZUN / Team Shanghai Alice and Alstroemeria Records. The weights are provided strictly for educational and transformative AI research purposes under Fair Use. You cannot use the model for commercial purposes.
 
 ## wait, what?
 
