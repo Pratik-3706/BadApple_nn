@@ -118,7 +118,7 @@ train_outputs/       — sample frames saved during training
 
 2. **MSE loss makes everything foggy.** Switching to `BCEWithLogitsLoss` was the single biggest improvement for getting clean black/white separation.
 
-3. **omega_0 is the sharpness dial.** Too low (10-20) and everything is soft and blurry. Too high (100+) and training becomes unstable. 60 is the sweet spot for this video.
+3. **omega_0 is the sharpness dial.** Too low (10-20) and everything is soft and blurry. Too high (100+) and training becomes unstable. 30 is the sweet spot for this video.
 
 4. **AMP (mixed precision) is free speed.** Literally just wrap your forward pass in `torch.cuda.amp.autocast()` and training goes ~2x faster with zero quality loss.
 

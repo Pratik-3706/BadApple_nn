@@ -167,9 +167,9 @@ class InferenceEngine:
         # hooks fire automatically and populate self.activations.
         with torch.no_grad():
             logits = self.model(grid)
-            # Replicate the exact rendering logic from train.py
-            # train.py doesn't use sigmoid, it just multiplies raw logits by 255 and clips!
-            pixels = logits
+            # We restore sigmoid to fix mid-gray rendering, but multiply logits by 4.0 
+            # to maintain the high-contrast sharp edges from the previous raw-logit clip.
+            pixels = torch.sigmoid(logits * 4.0)
 
         # sync GPU if needed (perf_counter won't include async GPU work otherwise)
         if self.device.type == 'cuda':

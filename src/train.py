@@ -54,7 +54,7 @@ def save_sample_frames(model, total_frames, epoch, device):
                 continue
 
             grid = make_inference_grid(fi, total_frames, device=device)
-            pixels = model(grid)
+            pixels = torch.sigmoid(model(grid) * 4.0)
 
             # reshape back to image
             img = pixels.cpu().numpy().reshape(TARGET_H, TARGET_W)
@@ -107,8 +107,8 @@ def train():
     if os.path.exists(checkpoint_path):
         print(f"found checkpoint at {checkpoint_path}, attempting to resume...")
         try:
-            # wait, weights_only is safer but sometimes fails on older pytorch
-            ckpt = torch.load(checkpoint_path, map_location=device)
+            # loading with weights_only=True is safer and best practice
+            ckpt = torch.load(checkpoint_path, map_location=device, weights_only=True)
             model.load_state_dict(ckpt['model_state_dict'])
             optimizer.load_state_dict(ckpt['optimizer_state_dict'])
             start_epoch = ckpt.get('epoch', 0) + 1

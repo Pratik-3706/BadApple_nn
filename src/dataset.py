@@ -71,8 +71,8 @@ class BadAppleDataset(Dataset):
         return self.total_pixels
 
     def get_batch(self, batch_size):
-        # pick random frames (uniform sampling is 100x faster than weighted choice)
-        frame_indices = np.random.randint(0, self.num_frames, size=batch_size)
+        # pick random frames using the motion-aware weights we computed
+        frame_indices = np.random.choice(self.num_frames, size=batch_size, p=self.frame_weights)
 
         # pick random pixels in those frames
         py = np.random.randint(0, self.H, size=batch_size)
