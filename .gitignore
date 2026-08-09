@@ -29,3 +29,7 @@ venv/
 *~
 Thumbs.db
 .DS_Store
+
+checkpoints/hf_ckp/
+
+clean_ckpt.py

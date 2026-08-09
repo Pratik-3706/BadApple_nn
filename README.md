@@ -5,7 +5,11 @@ You give it a coordinate. It gives you a pixel. Do that 172,800 times and you ge
 ---
 
 > [!NOTE]  
-> **Pre-trained Hugging Face checkpoints coming soon!** Soon you'll be able to download the weights and run the web player instantly without having to train it yourself.
+> **Pre-trained weights are now available!** You can download the trained model checkpoint directly from Hugging Face and run the web player instantly.
+> - **Hugging Face Model:** [Pratik-3706/bad_epoch](https://huggingface.co/Pratik-3706/bad_epoch)
+
+## License
+The code in this repository is released under the **MIT License**. The model weights on Hugging Face are released under the same license.
 
 
 ## wait, what?
