@@ -1,0 +1,1 @@
+Extracted frames from the video will be saved here during step 1.

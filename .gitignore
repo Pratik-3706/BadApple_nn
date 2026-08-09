@@ -3,7 +3,7 @@ bad_apple_vid/audio.mp3
 bad_apple_vid/vid.mp4
 checkpoints/badapple_nn.pt
 data/frames.npy
-bad_apple_vid/extracted_frames/
+bad_apple_vid/extracted_frames/*.png
 train_outputs/
 
 # -- python junk --
