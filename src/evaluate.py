@@ -1,5 +1,5 @@
 """
-Post-training evaluation — checks how well the model actually learned the video.
+Post-training evaluation - checks how well the model actually learned the video.
 
 Run this after training finishes to see per-frame PSNR, worst frames,
 and generate a side-by-side comparison. If the numbers look bad,

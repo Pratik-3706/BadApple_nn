@@ -1,9 +1,7 @@
 # BadApple × NN
+A neural network that memorizes the entire Bad Apple music video and regenerates it live, frame by frame, from pure math. No video file, no frames on disk just ~1,050,000 learned numbers (weights) and a function that takes in `(time, x, y)` and spits out a pixel brightness.
 
-A neural network that memorizes the entire Bad Apple music video and regenerates it live, frame by frame, from pure math. No video file, no frames on disk just ~264,000 learned numbers (weights) and a function that takes in `(time, x, y)` and spits out a pixel brightness.
-
-You give it a coordinate. It gives you a pixel. Do that 172,800 times and you get a frame. Do *that* 6,505 times and you get the whole video. The entire 3:39 music video lives inside a ~3.2MB file.
-
+You give it a coordinate. It gives you a pixel. Do that 172,800 times and you get a frame. Do *that* 6,585 times and you get the whole video. The entire 3:39 music video lives inside a ~4.2MB file.
 ---
 
 > [!NOTE]  
@@ -29,19 +27,19 @@ So we train a neural network to *become* that function. And then we throw away t
 The network uses **sinusoidal activations** (SIREN architecture). Instead of the usual ReLU activations that most neural nets use, every layer passes its output through `sin()`. This lets the network learn extremely sharp, high-frequency patterns which is exactly what you need to reconstruct crispy black-and-white edges.
 
 The architecture:
-- **Input**: 3 values — `(t, x, y)`, all normalized to `[-1, 1]`
-- **Hidden layers**: 5 layers, 256 neurons each, all with `sin()` activations
-- **Output**: 1 value — pixel brightness (0 = black, 1 = white)
+- **Input**: 3 values - `(t, x, y)`, all normalized to `[-1, 1]`
+- **Hidden layers**: 5 layers, 512 neurons each, all with `sin()` activations
+- **Output**: 1 value - pixel brightness (0 = black, 1 = white)
 - **omega_0**: 30.0 (controls how "detailed" the sine waves can get)
-- **Total params**: ~264K *(Edit: The README originally bragged about 1.8M params, but someone on GitHub correctly pointed out I hardcoded the model to 256/5 in the code. Turns out it memorized the video with 7x fewer params than I thought. Task failed successfully.)*
+- **Total params**: ~1.05M *(Recently widened from 256 to 512 for even sharper details)*
 
 Training uses `BCEWithLogitsLoss` instead of the more common `MSELoss` because Bad Apple is essentially a binary video pixels are either black or white. BCE brutally punishes the network for predicting wishy-washy gray values, which forces it to commit to razor-sharp edges.
 
 ## the web player
 
-Once trained, a FastAPI server runs the neural network live and streams the generated frames to a web browser over WebSocket. The left panel shows the video being generated in real-time. The right panel shows an **activation x-ray** a live heatmap of every single neuron in every layer, so you can literally watch the network "think" as it draws each frame.
+Once trained, a FastAPI server runs the neural network live and streams the generated frames to a web browser over WebSocket. The left panel shows the video being generated in real-time. The right panel shows a live heatmap of every single neuron in every layer, so you can literally watch the network "think" as it draws each frame.
 
-The audio plays synced in the browser while the neural network generates the visuals at 29.9 fps. If the GPU can't keep up, it'll drop frames to stay in sync rather than going slow-mo.
+The audio plays synced in the browser while the neural network generates the visuals at 29.9 fps. The inference engine natively utilizes FP16 precision on GPUs to trigger Tensor Cores, enabling perfectly smooth real-time generation even on massive frame grids. If the GPU still can't keep up, it'll drop frames to stay in sync rather than going slow-mo.
 
 ## running it yourself
 
@@ -93,23 +91,23 @@ Then open `http://localhost:8000` in your browser and hit play.
 
 ```
 src/
-  model.py           — the SIREN neural network architecture
-  dataset.py         — loads frames, builds coordinate grids, serves random batches
-  train.py           — training loop with AMP, checkpoint saving/loading
-  extract_frames.py  — rips frames from the video into a numpy array
-  inference_engine.py— runs the trained model live, captures layer activations
-  server.py          — FastAPI + WebSocket server for real-time streaming
-  evaluate.py        — SSIM/PSNR quality metrics
+  model.py           - the SIREN neural network architecture
+  dataset.py         - loads frames, builds coordinate grids, serves random batches
+  train.py           - training loop with AMP, checkpoint saving/loading
+  extract_frames.py  - rips frames from the video into a numpy array
+  inference_engine.py- runs the trained model live, captures layer activations
+  server.py          - FastAPI + WebSocket server for real-time streaming
+  evaluate.py        - SSIM/PSNR quality metrics
 
 static/
-  index.html         — the web player UI
-  app.js             — frontend logic, network diagram rendering, activation viz
-  style.css          — dark theme styling
+  index.html         - the web player UI
+  app.js             - frontend logic, network diagram rendering, activation viz
+  style.css          - dark theme styling
 
-bad_apple_vid/       — put your vid.mp4 here
-checkpoints/         — trained model weights (.pt)
-data/                — extracted frames (.npy)
-train_outputs/       — sample frames saved during training
+bad_apple_vid/       - put your vid.mp4 here
+checkpoints/         - trained model weights (.pt)
+data/                - extracted frames (.npy)
+train_outputs/       - sample frames saved during training
 ```
 
 ## things i learned building this
@@ -126,6 +124,10 @@ train_outputs/       — sample frames saved during training
 
 ## credits
 
-- **Bad Apple!!** — Original song from the Touhou Project by ZUN. Shadow art video by あにら (Anira) on Nico Nico Douga.
+- **Bad Apple!!** - Original song from the Touhou Project by ZUN. Shadow art video by あにら (Anira) on Nico Nico Douga.
 - **SIREN** "Implicit Neural Representations with Periodic Activation Functions" by Sitzmann et al. 2020
 - Built in the proud tradition of "will it play Bad Apple?" right next to oscilloscopes, graphing calculators, and Minecraft redstone.
+
+## license
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details (or treat it as MIT). Feel free to fork, modify, and build your own Bad Apple neural networks!

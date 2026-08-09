@@ -1,5 +1,5 @@
 /*
- * BadApple_X_NN — frontend
+ * BadApple_X_NN - frontend
  *
  * connects to the websocket, draws frames on canvas,
  * builds the network diagram with EVERY neuron (no subsampling),
@@ -16,6 +16,7 @@ let isPlaying = false;
 let modelInfo = null;
 let proofMode = false;
 let currentFps = 29.9;
+let currentMode = 'best'; // 'best', 'latest', or 'compare'
 
 // fps tracking
 let frameTimestamps = [];
@@ -24,6 +25,10 @@ const FPS_WINDOW = 30;
 // canvas
 const canvas = document.getElementById('video-canvas');
 const ctx = canvas.getContext('2d');
+
+// compare canvas
+const canvasCompare = document.getElementById('video-canvas-compare');
+const ctxCompare = canvasCompare.getContext('2d');
 
 // audio
 const audioPlayer = document.getElementById('audio-player');
@@ -39,23 +44,94 @@ window.addEventListener('DOMContentLoaded', async () => {
     try {
         const resp = await fetch('/api/model-info');
         modelInfo = await resp.json();
+        
+        const connResp = await fetch('/api/connections');
+        const connections = await connResp.json();
+        
         document.getElementById('param-display').textContent =
             formatNumber(modelInfo.total_params) + ' params';
-        buildNetworkDiagram(modelInfo);
+        buildNetworkDiagram(modelInfo, connections);
     } catch (e) {
-        console.error('model info fetch failed:', e);
+        console.error('model/connections info fetch failed:', e);
     }
 
-    audioPlayer.addEventListener('canplaythrough', () => {
+    audioPlayer.addEventListener('canplay', () => {
         audioReady = true;
     });
-    audioPlayer.addEventListener('error', () => {
-        audioReady = false;
+    audioPlayer.addEventListener('loadedmetadata', () => {
+        audioReady = true;
+    });
+    audioPlayer.addEventListener('error', (e) => {
+        console.error("Audio element error:", e);
     });
 
     setupControls();
+    setupModeSelector();
     connectWebSocket();
 });
+
+
+// ============================================================
+// mode selector - best / latest / compare
+// ============================================================
+
+function setupModeSelector() {
+    const select = document.getElementById('model-mode-select');
+    select.addEventListener('change', () => {
+        currentMode = select.value;
+        const serverMode = currentMode === 'compare_real_best' ? 'best' : 
+                           currentMode === 'compare_real_latest' ? 'latest' : 
+                           currentMode;
+        send({ type: 'set_mode', mode: serverMode });
+        updateCompareLayout();
+    });
+}
+
+function updateCompareLayout() {
+    const compareFrame = document.getElementById('compare-frame');
+    const realFrame = document.getElementById('real-frame');
+    const compareLabels = document.getElementById('compare-labels');
+    const videoStage = document.getElementById('video-stage');
+    const modelTag = document.getElementById('model-tag-main');
+    
+    const labelBest = document.querySelector('.compare-label--best');
+    const labelLatest = document.querySelector('.compare-label--latest');
+    const labelReal = document.querySelector('.compare-label--real');
+
+    compareFrame.style.display = 'none';
+    realFrame.style.display = 'none';
+    compareLabels.style.display = 'none';
+    videoStage.classList.remove('video-stage--compare');
+    modelTag.style.display = '';
+    modelTag.textContent = currentMode.toUpperCase().replace('_', ' ');
+    
+    labelBest.style.display = 'none';
+    labelLatest.style.display = 'none';
+    labelReal.style.display = 'none';
+
+    if (currentMode === 'compare') {
+        compareFrame.style.display = '';
+        compareLabels.style.display = '';
+        videoStage.classList.add('video-stage--compare');
+        modelTag.style.display = 'none';
+        
+        labelBest.style.display = '';
+        labelLatest.style.display = '';
+        
+    } else if (currentMode.startsWith('compare_real')) {
+        realFrame.style.display = '';
+        compareLabels.style.display = '';
+        videoStage.classList.add('video-stage--compare');
+        modelTag.style.display = 'none';
+        
+        if (currentMode === 'compare_real_best') {
+            labelBest.style.display = '';
+        } else {
+            labelLatest.style.display = '';
+        }
+        labelReal.style.display = '';
+    }
+}
 
 
 // ============================================================
@@ -71,11 +147,14 @@ function connectWebSocket() {
 
     ws.onopen = () => {
         setStatus('connected');
+        // tell the server what mode we're in
+        send({ type: 'set_mode', mode: currentMode });
     };
 
     ws.onmessage = (event) => {
         const msg = JSON.parse(event.data);
         if (msg.type === 'frame') handleFrame(msg);
+        else if (msg.type === 'compare_frame') handleCompareFrame(msg);
     };
 
     ws.onclose = () => {
@@ -94,7 +173,7 @@ function send(cmd) {
 
 
 // ============================================================
-// frame handler — video + diagram update from the same message
+// frame handler - video + diagram update from the same message
 // ============================================================
 
 function handleFrame(msg) {
@@ -117,25 +196,42 @@ function handleFrame(msg) {
 }
 
 function drawFrame(b64, width, height) {
-    const raw = atob(b64);
-    const bytes = new Uint8Array(raw.length);
-    for (let i = 0; i < raw.length; i++) bytes[i] = raw.charCodeAt(i);
+    drawFrameOn(canvas, ctx, b64, width, height);
+}
 
-    if (canvas.width !== width || canvas.height !== height) {
-        canvas.width = width;
-        canvas.height = height;
+function drawFrameOn(targetCanvas, targetCtx, b64, width, height) {
+    if (targetCanvas.width !== width || targetCanvas.height !== height) {
+        targetCanvas.width = width;
+        targetCanvas.height = height;
     }
 
-    const img = ctx.createImageData(width, height);
-    for (let i = 0; i < bytes.length; i++) {
-        const v = bytes[i];
-        const j = i * 4;
-        img.data[j] = v;
-        img.data[j + 1] = v;
-        img.data[j + 2] = v;
-        img.data[j + 3] = 255;
+    const img = new Image();
+    img.onload = () => {
+        targetCtx.drawImage(img, 0, 0, width, height);
+    };
+    img.src = 'data:image/jpeg;base64,' + b64;
+}
+
+function handleCompareFrame(msg) {
+    const now = performance.now();
+    frameTimestamps.push(now);
+    while (frameTimestamps.length > FPS_WINDOW) frameTimestamps.shift();
+
+    totalFrames = msg.best.total_frames;
+
+    // draw best on left canvas
+    drawFrameOn(canvas, ctx, msg.best.pixels, msg.best.width, msg.best.height);
+
+    // draw latest on right canvas
+    drawFrameOn(canvasCompare, ctxCompare, msg.latest.pixels, msg.latest.width, msg.latest.height);
+
+    // update network activations from the best model (it's the reference)
+    if (modelInfo && msg.best.activations) {
+        updateActivations(msg.best.activations);
     }
-    ctx.putImageData(img, 0, 0);
+
+    // use the best model's stats for display
+    updateStats(msg.best);
 }
 
 function updateStats(msg) {
@@ -153,6 +249,25 @@ function updateStats(msg) {
 
     document.getElementById('inference-display').textContent =
         msg.inference_ms.toFixed(1) + ' ms';
+        
+    // soft-sync real video to the exact frame the NN is currently rendering
+    // this prevents the HTML5 video from drifting ahead or behind the websocket stream
+    const realVideo = document.getElementById('real-video');
+    if (realVideo && currentMode.startsWith('compare_real')) {
+        if (msg.frame_index >= msg.total_frames - 1) {
+            // hide real video at the end to match the NN rendering black
+            realVideo.style.opacity = '0';
+        } else {
+            realVideo.style.opacity = '1';
+            if (!realVideo.paused) {
+                const dur = realVideo.duration || 219.0;
+                const targetTime = (msg.frame_index / msg.total_frames) * dur;
+                if (Math.abs(realVideo.currentTime - targetTime) > 0.1) {
+                    realVideo.currentTime = targetTime;
+                }
+            }
+        }
+    }
 
     if (frameTimestamps.length >= 2) {
         const dt = frameTimestamps[frameTimestamps.length - 1] - frameTimestamps[0];
@@ -165,7 +280,7 @@ function updateStats(msg) {
 // ============================================================
 // network diagram
 //
-// this draws EVERY neuron — all 256 per hidden layer, no cap.
+// this draws EVERY neuron - all 512 per hidden layer, no cap.
 // each neuron gets its own rect in the heatmap strip.
 // colors come from the exact values the forward hooks captured.
 // ============================================================
@@ -173,7 +288,7 @@ function updateStats(msg) {
 let neuronRects = {};       // { 'layer_0': [<rect>, ...], ... }
 let currentActivations = {};
 
-function buildNetworkDiagram(info) {
+function buildNetworkDiagram(info, connections = {}) {
     const svg = document.getElementById('network-svg');
     const container = document.getElementById('network-container');
     const bounds = container.getBoundingClientRect();
@@ -183,6 +298,15 @@ function buildNetworkDiagram(info) {
     svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
     svg.innerHTML = '';
 
+    // setup canvas context
+    const netCanvas = document.getElementById('network-canvas');
+    netCanvas.width = W;
+    netCanvas.height = H;
+    const netCtx = netCanvas.getContext('2d', { alpha: true });
+    
+    // clear it out
+    netCtx.clearRect(0, 0, W, H);
+    
     const numHidden = info.layer_names.length;
     const totalCols = numHidden + 2; // input + hidden layers + output
     const colW = W / totalCols;
@@ -208,12 +332,11 @@ function buildNetworkDiagram(info) {
     }
 
     // ---- hidden layers: ALL neurons, no subsampling ----
-    neuronRects = {};
+    neuronRects = {}; // { 'layer_0': [{x, y, w, h}, ...], ... }
     const layerCenters = [];
 
     // each neuron = 1 row in the heatmap strip.
-    // with 256 neurons, each row is thin but every one is there.
-    const neuronsPerLayer = info.hidden_features; // ALL of them
+    const neuronsPerLayer = info.hidden_features; 
     const neuronH = Math.max(usableH / neuronsPerLayer, 0.5);
     const stripH = neuronH * neuronsPerLayer;
     const stripTop = padY + (usableH - stripH) / 2;
@@ -227,45 +350,71 @@ function buildNetworkDiagram(info) {
         neuronRects[layerName] = [];
         const sx = cx - stripW / 2;
 
-        // background rect for the strip
-        appendSVG(svg, 'rect', {
-            x: sx - 1, y: stripTop - 1,
-            width: stripW + 2, height: stripH + 2,
-            rx: 3, ry: 3,
-            class: 'layer-strip-bg'
-        });
+        // background rect for the strip (can draw on canvas now)
+        netCtx.fillStyle = '#1e1e24';
+        netCtx.beginPath();
+        netCtx.roundRect(sx - 1, stripTop - 1, stripW + 2, stripH + 2, 3);
+        netCtx.fill();
 
-        // one rect per neuron — every single one, no skipping
+        // store coords for every single neuron, no skipping
         for (let ni = 0; ni < neuronsPerLayer; ni++) {
-            const rect = appendSVG(svg, 'rect', {
+            neuronRects[layerName].push({
                 x: sx,
                 y: stripTop + ni * neuronH,
-                width: stripW,
-                height: Math.max(neuronH - 0.3, 0.5),
-                fill: '#0f0f18',
-                'data-layer': layerName,
-                'data-neuron': ni,
+                w: stripW,
+                h: Math.max(neuronH - 0.3, 0.5)
             });
-
-            rect.addEventListener('mouseenter', (e) => showTooltip(e, layerName, ni));
-            rect.addEventListener('mouseleave', hideTooltip);
-            rect.addEventListener('mousemove', (e) => moveTooltip(e));
-
-            neuronRects[layerName].push(rect);
         }
 
-        // layer label
+        // layer label (keep in SVG for crisp text)
         const label = appendSVG(svg, 'text', {
             x: cx, y: stripTop + stripH + 14, class: 'layer-label'
         });
         label.textContent = `L${li}`;
 
-        // neuron count label — shows this is exact
+        // neuron count label 
         const count = appendSVG(svg, 'text', {
             x: cx, y: stripTop + stripH + 23, class: 'layer-count'
         });
         count.textContent = `${neuronsPerLayer}n`;
     }
+
+    // setup canvas mouse tracking for tooltips
+    netCanvas.style.pointerEvents = 'auto'; // allow mouse events on canvas
+    netCanvas.addEventListener('mousemove', (e) => {
+        const rect = netCanvas.getBoundingClientRect();
+        const mouseX = e.clientX - rect.left;
+        const mouseY = e.clientY - rect.top;
+
+        // find which neuron we are hovering
+        let found = false;
+        for (const [layerName, rects] of Object.entries(neuronRects)) {
+            // quick check bounding box of whole layer first
+            const first = rects[0];
+            const last = rects[rects.length - 1];
+            if (mouseX >= first.x && mouseX <= first.x + first.w &&
+                mouseY >= first.y && mouseY <= last.y + last.h) {
+                
+                // inside this layer, find exact neuron
+                for (let i = 0; i < rects.length; i++) {
+                    const r = rects[i];
+                    if (mouseY >= r.y && mouseY <= r.y + r.h) {
+                        showTooltip(e, layerName, i);
+                        found = true;
+                        break;
+                    }
+                }
+            }
+            if (found) break;
+        }
+
+        if (!found) {
+            hideTooltip();
+        } else {
+            moveTooltip(e);
+        }
+    });
+    netCanvas.addEventListener('mouseleave', hideTooltip);
 
     // ---- output node ----
     const outX = colW * (totalCols - 0.5);
@@ -279,96 +428,128 @@ function buildNetworkDiagram(info) {
     });
     outLbl.textContent = 'px';
 
-    // ---- connections ----
-    // input -> first hidden
-    drawInputConnections(svg, inputPositions, layerCenters[0], stripW, stripTop, stripH);
-
-    // hidden -> hidden
-    for (let i = 0; i < layerCenters.length - 1; i++) {
-        drawHiddenConnections(svg,
-            layerCenters[i], layerCenters[i + 1],
-            stripW, stripTop, stripH);
-    }
-
-    // last hidden -> output
-    drawOutputConnections(svg,
-        layerCenters[layerCenters.length - 1], stripW,
-        stripTop, stripH, outX, outY);
-}
-
-
-// connection drawing helpers — stylized, not all-to-all
-// (drawing 256^2 = 65K lines per layer would be a solid block of color)
-
-function createConnection(svg, x1, y1, x2, y2) {
-    // sleek bezier S-curve instead of a messy zigzag
-    const dx = Math.abs(x2 - x1) * 0.4;
-    const d = `M ${x1} ${y1} C ${x1 + dx} ${y1} ${x2 - dx} ${y2} ${x2} ${y2}`;
-    
-    appendSVG(svg, 'path', {
-        class: 'connection-line',
-        fill: 'none',
-        d: d
-    });
-}
-
-function drawInputConnections(svg, inputs, toX, stripW, stripTop, stripH) {
-    const n = 6;
-    const step = stripH / (n + 1);
-    for (const pt of inputs) {
-        for (let i = 0; i < n; i++) {
-            createConnection(svg, pt.x + 9, pt.y, toX - stripW / 2, stripTop + step * (i + 1));
+    // ---- real connections ----
+    const connCanvas = document.getElementById('connections-canvas');
+    if (connCanvas && Object.keys(connections).length > 0) {
+        connCanvas.width = W;
+        connCanvas.height = H;
+        const connCtx = connCanvas.getContext('2d');
+        connCtx.clearRect(0, 0, W, H);
+        
+        // draw the sparse real connections
+        for (let li = 0; li < numHidden; li++) {
+            const layerName = `layer_${li}`;
+            const layerConns = connections[layerName];
+            if (!layerConns) continue;
+            
+            const isFirst = (li === 0);
+            
+            // X coordinates
+            const fromX = isFirst ? inX + 9 : layerCenters[li - 1] + stripW / 2;
+            const toX = layerCenters[li] - stripW / 2;
+            
+            // source Y coords (inputs or previous layer)
+            const getSourceY = (srcIdx) => {
+                if (isFirst) {
+                    return padY + inSpacing * (srcIdx + 1);
+                }
+                const prevName = `layer_${li - 1}`;
+                const prevRects = neuronRects[prevName];
+                if (prevRects && prevRects[srcIdx]) {
+                    return prevRects[srcIdx].y + prevRects[srcIdx].h / 2;
+                }
+                return padY + usableH / 2;
+            };
+            
+            const destRects = neuronRects[layerName];
+            if (!destRects) continue;
+            
+            // draw lines
+            for (let destIdx = 0; destIdx < layerConns.length; destIdx++) {
+                const conns = layerConns[destIdx];
+                const destY = destRects[destIdx].y + destRects[destIdx].h / 2;
+                
+                for (const [srcIdx, weight] of conns) {
+                    const srcY = getSourceY(srcIdx);
+                    
+                    connCtx.beginPath();
+                    connCtx.moveTo(fromX, srcY);
+                    connCtx.lineTo(toX, destY);
+                    
+                    // color by weight (red/blue brutalist)
+                    const normalizedW = Math.max(-1, Math.min(1, weight * 10)); // arbitrarily scale up for color visibility
+                    if (normalizedW >= 0) {
+                        connCtx.strokeStyle = `rgba(220, 38, 38, ${0.1 + normalizedW * 0.4})`;
+                    } else {
+                        connCtx.strokeStyle = `rgba(30, 64, 175, ${0.1 + (-normalizedW) * 0.4})`;
+                    }
+                    
+                    connCtx.lineWidth = 1.0;
+                    connCtx.stroke();
+                }
+            }
         }
-    }
-}
-
-function drawHiddenConnections(svg, fromX, toX, stripW, stripTop, stripH) {
-    const n = 10;
-    const step = stripH / (n + 1);
-    for (let i = 0; i < n; i++) {
-        const y1 = stripTop + step * (i + 1);
-        for (let j = 0; j < 3; j++) {
-            const y2 = stripTop + step * (((i + j * 3 + 1) % n) + 1);
-            createConnection(svg, fromX + stripW / 2, y1, toX - stripW / 2, y2);
+        
+        // Output layer connections (from last hidden layer to output)
+        const lastLayerName = `layer_${numHidden}`;
+        const outputConns = connections[lastLayerName];
+        if (outputConns && outputConns.length > 0) {
+            const fromX = layerCenters[numHidden - 1] + stripW / 2;
+            const prevRects = neuronRects[`layer_${numHidden - 1}`];
+            
+            for (const [srcIdx, weight] of outputConns[0]) {
+                if (prevRects && prevRects[srcIdx]) {
+                    const srcY = prevRects[srcIdx].y + prevRects[srcIdx].h / 2;
+                    connCtx.beginPath();
+                    connCtx.moveTo(fromX, srcY);
+                    connCtx.lineTo(outX - 9, outY);
+                    
+                    const normalizedW = Math.max(-1, Math.min(1, weight * 10));
+                    if (normalizedW >= 0) {
+                        connCtx.strokeStyle = `rgba(220, 38, 38, ${0.2 + normalizedW * 0.6})`;
+                    } else {
+                        connCtx.strokeStyle = `rgba(30, 64, 175, ${0.2 + (-normalizedW) * 0.6})`;
+                    }
+                    connCtx.lineWidth = 1.0;
+                    connCtx.stroke();
+                }
+            }
         }
-    }
-}
-
-function drawOutputConnections(svg, fromX, stripW, stripTop, stripH, toX, toY) {
-    const n = 6;
-    const step = stripH / (n + 1);
-    for (let i = 0; i < n; i++) {
-        createConnection(svg, fromX + stripW / 2, stripTop + step * (i + 1), toX - 9, toY);
     }
 }
 
 
 // ============================================================
-// activation update — runs every frame, updates ALL neurons
+// activation update - runs every frame, updates ALL neurons
 //
 // the values come straight from register_forward_hook.
 // per-neuron mean activation across all spatial positions.
-// this is the exact mathematical quantity — not an approximation.
+// this is the exact mathematical quantity - not an approximation.
 // ============================================================
 
 function updateActivations(activations) {
     currentActivations = activations;
 
+    const netCanvas = document.getElementById('network-canvas');
+    if (!netCanvas) return;
+    const netCtx = netCanvas.getContext('2d', { alpha: true });
+
     for (const [layerName, values] of Object.entries(activations)) {
         const rects = neuronRects[layerName];
         if (!rects) continue;
 
-        // update every single neuron rect — all 256
         const len = Math.min(rects.length, values.length);
         for (let i = 0; i < len; i++) {
-            rects[i].setAttribute('fill', valueToColor(values[i]));
+            const r = rects[i];
+            netCtx.fillStyle = valueToColor(values[i]);
+            netCtx.fillRect(r.x, r.y, r.w, r.h);
         }
     }
 }
 
 
 // ============================================================
-// colormap — diverging blue/red
+// colormap - diverging blue/red
 //
 // maps the exact activation value to a color.
 // sin() layer outputs are bounded to [-1, 1].
@@ -376,7 +557,7 @@ function updateActivations(activations) {
 // ============================================================
 
 function valueToColor(v) {
-    // clamp to [-1, 1] — sin() can't exceed this anyway
+    // clamp to [-1, 1] - sin() can't exceed this anyway
     v = Math.max(-1, Math.min(1, v));
 
     // we use a perceptually uniform-ish diverging map:
@@ -404,7 +585,7 @@ function valueToColor(v) {
 
 
 // ============================================================
-// tooltip — shows the exact value when you hover a neuron
+// tooltip - shows the exact value when you hover a neuron
 // ============================================================
 
 function showTooltip(e, layerName, neuronIdx) {
@@ -469,13 +650,15 @@ function setupControls() {
         playBtn.classList.toggle('playing', isPlaying);
         send({ type: isPlaying ? 'play' : 'pause' });
 
-        if (audioReady) {
-            if (isPlaying) {
-                syncAudio(parseInt(seekBar.value));
-                audioPlayer.play().catch(() => {});
-            } else {
-                audioPlayer.pause();
-            }
+        if (isPlaying) {
+            syncAudio(parseInt(seekBar.value));
+            audioPlayer.play().catch(e => console.error("Audio play error:", e));
+            const realVideo = document.getElementById('real-video');
+            if (realVideo && currentMode.startsWith('compare_real')) realVideo.play().catch(()=>{});
+        } else {
+            audioPlayer.pause();
+            const realVideo = document.getElementById('real-video');
+            if (realVideo) realVideo.pause();
         }
     });
 
@@ -486,7 +669,7 @@ function setupControls() {
         seekBar._dragging = false;
         const f = parseInt(seekBar.value);
         send({ type: 'seek', frame_index: f });
-        if (audioReady) syncAudio(f);
+        if (isPlaying) syncAudio(f);
     });
     seekBar.addEventListener('input', () => {
         if (seekBar._dragging) {
@@ -521,9 +704,15 @@ function setupControls() {
 }
 
 function syncAudio(frameIdx) {
-    if (!audioReady || !totalFrames) return;
-    const dur = audioPlayer.duration || 219;
-    audioPlayer.currentTime = (frameIdx / totalFrames) * dur;
+    if (!totalFrames) return;
+    const dur = audioPlayer.duration && !isNaN(audioPlayer.duration) ? audioPlayer.duration : 219.0;
+    const t = (frameIdx / totalFrames) * dur;
+    audioPlayer.currentTime = t;
+    
+    const realVideo = document.getElementById('real-video');
+    if (realVideo && currentMode.startsWith('compare_real')) {
+        realVideo.currentTime = t;
+    }
 }
 
 

@@ -6,7 +6,7 @@ the function f(t, x, y) -> brightness. Feed it any coordinate, it gives
 you the pixel value. The entire video lives in the weights.
 
 Architecture based on Sitzmann et al. 2020 "Implicit Neural Representations
-with Periodic Activation Functions" — but we don't need to be academic about it.
+with Periodic Activation Functions" - but we don't need to be academic about it.
 It's just sin() activations with careful weight initialization.
 """
 
@@ -20,7 +20,7 @@ class SineLayer(nn.Module):
     """
     A single linear layer followed by sin() activation.
 
-    The magic is in the initialization — this won't converge properly
+    The magic is in the initialization - this won't converge properly
     without it. Trust the math here, I've tried random init and it
     produces garbage blurry frames.
 
@@ -37,7 +37,7 @@ class SineLayer(nn.Module):
 
     def _init_weights(self):
         # first layer and hidden layers need different init ranges.
-        # this comes from the sinusoidal representation paper — eq. 9 and 10.
+        # this comes from the sinusoidal representation paper - eq. 9 and 10.
         # messing with this will break training, ask me how i know.
         with torch.no_grad():
             n = self.linear.in_features
@@ -54,18 +54,17 @@ class SineLayer(nn.Module):
 
 class SineMLP(nn.Module):
     """
-    Full sinusoidal MLP: stack of SineLayers + linear output.
-
-    Input:  (t, x, y) — 3 values, all in [-1, 1]
-    Output: pixel brightness — 1 value in [0, 1]
-
-    Default config (5 layers, 256 wide) gives ~264K params.
-    That's small enough to run inference at 30fps on an RTX 2050
-    while still capturing enough detail for a watchable video.
+    A multi-layer perceptron (MLP) with Sine activation functions (SIREN).
+    Unlike standard MLPs with ReLU, SIRENs are capable of learning high-frequency 
+    details, making them perfect for memorizing complex signals like images or video.
+    
+    Default config:
+      - 5 hidden layers, 512 wide
+      - ~1.05M parameters
+      - omega_0 = 30.0 (controls the spatial frequency of the sine waves)
     """
-
-    def __init__(self, in_features=3, out_features=1,
-                 hidden_features=256, hidden_layers=5, omega_0=30.0):
+    def __init__(self, in_features=3, hidden_features=512, hidden_layers=5, 
+                 out_features=1, outermost_linear=True, omega_0=30.0):
         super().__init__()
 
         self.hidden_features = hidden_features
@@ -73,18 +72,18 @@ class SineMLP(nn.Module):
 
         layers = []
 
-        # first layer — takes the raw (t, x, y) coordinates
+        # first layer - takes the raw (t, x, y) coordinates
         layers.append(SineLayer(in_features, hidden_features,
                                 omega_0=omega_0, is_first=True))
 
-        # hidden layers — this is where the detail gets learned
+        # hidden layers - this is where the detail gets learned
         for i in range(hidden_layers - 1):
             layers.append(SineLayer(hidden_features, hidden_features,
                                     omega_0=omega_0))
 
         self.net = nn.Sequential(*layers)
 
-        # output layer — plain linear, no sine.
+        # output layer - plain linear, no sine.
         # sigmoid squashes to [0, 1] which is what we need for pixel values.
         self.output_layer = nn.Linear(hidden_features, out_features)
 
@@ -103,7 +102,7 @@ class SineMLP(nn.Module):
 
     def get_architecture_info(self):
         """
-        Returns a dict describing the network shape — used by the frontend
+        Returns a dict describing the network shape - used by the frontend
         to draw the node-link diagram. Called once when the page loads.
         """
         info = {
@@ -117,7 +116,7 @@ class SineMLP(nn.Module):
             'total_params': sum(p.numel() for p in self.parameters()),
         }
 
-        # grab the name of each sine layer — these are the ones we hook
+        # grab the name of each sine layer - these are the ones we hook
         for name, module in self.net.named_modules():
             if isinstance(module, SineLayer):
                 info['layer_names'].append(f'net.{name}')
@@ -128,15 +127,11 @@ class SineMLP(nn.Module):
 def build_model(device='cpu'):
     """Quick helper to build and move to device."""
     
-    # Oops. The README used to brag about 1.8 million parameters, but 
-    # someone on GitHub correctly pointed out I hardcoded this to 256/5 here.
-    # It turns out the model only has 264K parameters! 
-    # The fact that it still memorized the video this well with 7x fewer 
-    # params is a total flex, so we're keeping it this way.
+    # Model upgraded to 512-wide!
     model = SineMLP(
         in_features=3,
         out_features=1,
-        hidden_features=256,
+        hidden_features=512,
         hidden_layers=5,
         omega_0=30.0
     )
@@ -144,7 +139,7 @@ def build_model(device='cpu'):
 
 
 if __name__ == '__main__':
-    # sanity check — make sure shapes work and print param count
+    # sanity check - make sure shapes work and print param count
     model = build_model()
     info = model.get_architecture_info()
 

@@ -1,5 +1,5 @@
 """
-Live inference engine — the heart of this whole project.
+Live inference engine - the heart of this whole project.
 
 Loads the trained model, runs real forward passes frame by frame,
 and captures the actual activation values from each layer using
@@ -43,7 +43,7 @@ class InferenceEngine:
         if checkpoint_path is None:
             checkpoint_path = CHECKPOINT_PATH
 
-        # force cuda — if it fails, we want it to crash with an error, not fall back to slow CPU
+        # force cuda - if it fails, we want it to crash with an error, not fall back to slow CPU
         if device is None:
             device = torch.device('cuda')
         self.device = device
@@ -56,6 +56,13 @@ class InferenceEngine:
         # build model and load weights
         self.model = build_model(device)
         self.model.load_state_dict(checkpoint['model_state_dict'])
+        
+        # HUGE performance optimization for the user's GPU:
+        # SineMLP weights and bounds are well within float16 limits.
+        # This halves the VRAM bandwidth and utilizes Tensor Cores.
+        if device.type == 'cuda':
+            self.model = self.model.to(torch.float16)
+            
         self.model.eval()
 
         info = self.model.get_architecture_info()
@@ -65,13 +72,13 @@ class InferenceEngine:
 
         # this is where the hook data lands after each forward pass.
         # keys = layer names, values = activation arrays.
-        # gets overwritten every frame — that's the whole point.
+        # gets overwritten every frame - that's the whole point.
         self.activations = {}
 
         # register hooks on all SineLayer modules.
         # these fire automatically during forward() and capture
         # the output tensor of each layer. no extra work needed
-        # per frame — it just happens.
+        # per frame - it just happens.
         self._register_hooks()
 
         # pre-build coordinate grids for common frame indices.
@@ -86,7 +93,7 @@ class InferenceEngine:
         """
         Attach forward hooks to every SineLayer in the network.
 
-        Each hook captures the output of that layer — the raw activation
+        Each hook captures the output of that layer - the raw activation
         values produced by sin(omega * (Wx + b)). We reduce them to
         per-neuron means (average across all spatial positions) to keep
         the payload small enough to stream at 30fps.
@@ -99,7 +106,7 @@ class InferenceEngine:
 
         for name, module in self.model.named_modules():
             if isinstance(module, SineLayer):
-                # closure trick — need to capture layer_idx by value, not ref
+                # closure trick - need to capture layer_idx by value, not ref
                 hook = module.register_forward_hook(self._make_hook(f'layer_{layer_idx}'))
                 self._hooks.append(hook)
                 layer_idx += 1
@@ -110,10 +117,10 @@ class InferenceEngine:
         """
         Returns a hook function that stores activations under the given name.
 
-        The hook receives (module, input, output) from PyTorch.
-        output shape is [num_pixels, hidden_dim] — for 240x180 that's
-        [43200, 256]. We take the mean across pixels to get one value
-        per neuron: [256]. That's what goes to the frontend.
+        The hooks capture the raw tensor after sin(omega * Wx + b).
+        During inference on a frame grid (480x360), this tensor is shape
+        [43200, 512]. We take the mean across pixels to get one value
+        per neuron: [512]. That's what goes to the frontend.
         """
         def hook_fn(module, input, output):
             # detach from computation graph
@@ -136,7 +143,7 @@ class InferenceEngine:
         - frame_index, total_frames: for the UI counter
         """
         if frame_index >= self.total_frames:
-            # past the end of the video — return a black screen and zeroed activations
+            # past the end of the video - return a black screen and zeroed activations
             img_uint8 = np.zeros((self.height, self.width), dtype=np.uint8)
             zero_acts = {}
             if not self.activations:
@@ -158,12 +165,32 @@ class InferenceEngine:
         # clamp to valid range
         frame_index = max(0, min(frame_index, self.total_frames - 1))
 
-        # build the coordinate grid for this frame
-        grid = make_inference_grid(frame_index, self.total_frames, device=self.device)
+        # HUGE performance optimization: cache the static x, y grid on the GPU
+        # and only update the t column in-place. This avoids allocating a 172k-element
+        # tensor on the CPU and sending it to the GPU every single frame.
+        if getattr(self, '_cached_grid', None) is None:
+            from dataset import TARGET_W, TARGET_H
+            xs = np.linspace(-1, 1, TARGET_W, dtype=np.float32)
+            ys = np.linspace(-1, 1, TARGET_H, dtype=np.float32)
+            grid_x, grid_y = np.meshgrid(xs, ys)
+            coords = np.stack([
+                np.zeros(TARGET_H * TARGET_W, dtype=np.float32), # placeholder for t
+                grid_x.flatten(),
+                grid_y.flatten(),
+            ], axis=1)
+            self._cached_grid = torch.from_numpy(coords).to(self.device)
+            if self.device.type == 'cuda':
+                self._cached_grid = self._cached_grid.to(torch.float16)
+
+        # mathematically calculate t and update the first column of the tensor
+        t = -1.0 + 2.0 * frame_index / max(self.total_frames - 1, 1)
+        self._cached_grid[:, 0] = t
+
+        grid = self._cached_grid
 
         t0 = time.perf_counter()
 
-        # THE forward pass — this is where everything happens.
+        # THE forward pass - this is where everything happens.
         # hooks fire automatically and populate self.activations.
         with torch.no_grad():
             logits = self.model(grid)
@@ -177,13 +204,13 @@ class InferenceEngine:
 
         inference_ms = (time.perf_counter() - t0) * 1000
 
-        # reshape to image and convert to uint8
-        img = pixels.cpu().numpy().reshape(self.height, self.width)
-        img_uint8 = (img * 255).clip(0, 255).astype(np.uint8)
+        # reshape to image and convert to uint8 directly on the GPU
+        # to save massive amounts of CPU time and PCI-e bandwidth
+        img_uint8 = (pixels * 255.0).clamp(0, 255).to(torch.uint8).cpu().numpy().reshape(self.height, self.width)
 
         return {
             'pixels': img_uint8,
-            'activations': dict(self.activations),  # copy, not reference
+            'activations': dict(self.activations),  
             'inference_ms': round(inference_ms, 2),
             'frame_index': frame_index,
             'total_frames': self.total_frames,
@@ -192,6 +219,40 @@ class InferenceEngine:
     def get_model_info(self):
         """Architecture info for the frontend diagram."""
         return self.model.get_architecture_info()
+
+    def get_sparse_weights(self, top_k=2):
+        """
+        Extracts the strongest real connections from the model weights.
+        Returns a dictionary mapping layer names to a list of connections.
+        Each layer's list is ordered by destination neuron.
+        Format per layer: `[ [src_idx_1, weight_1], [src_idx_2, weight_2], ... ]` for each destination neuron.
+        """
+        sparse = {}
+        layer_idx = 0
+        
+        with torch.no_grad():
+            for name, module in self.model.named_modules():
+                if isinstance(module, torch.nn.Linear):
+                    weights = module.weight.cpu().numpy()
+                    dest_neurons = weights.shape[0]
+                    src_neurons = weights.shape[1]
+                    
+                    # For the final output layer (px), drawing only 5 lines looks extremely sparse
+                    # compared to the 512-wide hidden layers. We'll draw the top 128 connections here.
+                    k = min(src_neurons, top_k if dest_neurons > 1 else 128)
+                    
+                    layer_conns = []
+                    for i in range(dest_neurons):
+                        w_row = weights[i]
+                        # get indices of top K absolute weights
+                        top_indices = np.argsort(np.abs(w_row))[-k:]
+                        neuron_conns = [[int(idx), float(w_row[idx])] for idx in top_indices]
+                        layer_conns.append(neuron_conns)
+                        
+                    sparse[f'layer_{layer_idx}'] = layer_conns
+                    layer_idx += 1
+                    
+        return sparse
 
     def cleanup(self):
         """Remove hooks when shutting down."""
@@ -203,14 +264,14 @@ class InferenceEngine:
 def benchmark():
     """
     Run a quick benchmark to see if we can hit 30fps.
-    No UI, no network — just raw inference speed.
+    No UI, no network - just raw inference speed.
     """
     engine = InferenceEngine()
 
     print(f"\nbenchmarking 200 frames...")
     times = []
 
-    # warm up — first few passes are always slow
+    # warm up first few passes are always slow
     for i in range(5):
         engine.generate_frame(i)
 

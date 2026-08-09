@@ -1,7 +1,7 @@
 """
 Extract frames from Bad Apple video and save as numpy array.
 
-This is a run-once script — you do this before training, then never again
+This is a run-once script - you do this before training, then never again
 unless you change the source video or resolution.
 """
 
@@ -13,7 +13,7 @@ import time
 
 
 # ============================================================
-# config — change these if you want a different resolution.
+# config - change these if you want a different resolution.
 # the model doesn't care, it just sees (t, x, y) -> pixel.
 # you'll need to retrain after changing resolution though.
 # ============================================================
@@ -51,7 +51,7 @@ def extract():
         if not ret:
             break
 
-        # grayscale + resize — order matters, grayscale first is faster
+        # grayscale + resize - order matters, grayscale first is faster
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         small = cv2.resize(gray, (TARGET_W, TARGET_H), interpolation=cv2.INTER_AREA)
 

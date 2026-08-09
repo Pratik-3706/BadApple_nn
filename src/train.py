@@ -27,9 +27,9 @@ from dataset import BadAppleDataset, make_inference_grid, TARGET_W, TARGET_H
 # ============================================================
 # training config
 # ============================================================
-BATCH_SIZE = 65536          # 64K samples per step — covers ~1.5 full frames worth of pixels
+BATCH_SIZE = 65536          # 64K samples per step - covers ~1.5 full frames worth of pixels
 LEARNING_RATE = 1e-4
-EPOCHS = 300                # usually converges well before this
+EPOCHS = 600                # usually converges well before this
 CHECKPOINT_DIR = os.path.join(os.path.dirname(__file__), '..', 'checkpoints')
 OUTPUT_DIR = os.path.join(os.path.dirname(__file__), '..', 'train_outputs')
 
@@ -70,7 +70,7 @@ def train():
     os.makedirs(CHECKPOINT_DIR, exist_ok=True)
     os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-    # pick device — cuda if available, otherwise cpu (slower but works)
+    # pick device - cuda if available, otherwise cpu (slower but works)
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f"device: {device}")
     if device.type == 'cuda':
@@ -102,21 +102,42 @@ def train():
     best_loss = float('inf')
     scaler = torch.cuda.amp.GradScaler(enabled=(device.type == 'cuda'))
     checkpoint_path = os.path.join(CHECKPOINT_DIR, 'badapple_nn.pt')
+    latest_path = os.path.join(CHECKPOINT_DIR, 'badapple_nn_latest.pt')
 
     start_epoch = 1
-    if os.path.exists(checkpoint_path):
-        print(f"found checkpoint at {checkpoint_path}, attempting to resume...")
+
+    # prefer latest checkpoint (most recent epoch) over best checkpoint.
+    # this way we never repeat work after a restart.
+    resume_path = None
+    if os.path.exists(latest_path):
+        resume_path = latest_path
+    elif os.path.exists(checkpoint_path):
+        resume_path = checkpoint_path
+
+    if resume_path:
+        print(f"found checkpoint at {resume_path}, attempting to resume...")
         try:
-            # loading with weights_only=True is safer and best practice
-            ckpt = torch.load(checkpoint_path, map_location=device, weights_only=True)
+            ckpt = torch.load(resume_path, map_location=device, weights_only=True)
             model.load_state_dict(ckpt['model_state_dict'])
             optimizer.load_state_dict(ckpt['optimizer_state_dict'])
             start_epoch = ckpt.get('epoch', 0) + 1
             best_loss = ckpt.get('loss', float('inf'))
-            print(f"successfully resumed from epoch {start_epoch - 1} with best loss {best_loss:.6f}")
+            print(f"successfully resumed from epoch {start_epoch - 1} with loss {best_loss:.6f}")
+
+            # if we resumed from latest, we need the best loss from the best checkpoint
+            # (since latest tracks its own loss, not the all-time best)
+            if resume_path == latest_path and os.path.exists(checkpoint_path):
+                best_ckpt = torch.load(checkpoint_path, map_location=device, weights_only=True)
+                best_loss = best_ckpt.get('loss', float('inf'))
+                print(f"best loss from best checkpoint: {best_loss:.6f}")
         except Exception as e:
             print(f"failed to load checkpoint: {e}. starting fresh.")
             start_epoch = 1
+
+    # enable TF32 for a huge speedup on Ampere GPUs (like RTX 2050)
+    if torch.cuda.is_available():
+        torch.backends.cuda.matmul.allow_tf32 = True
+        torch.backends.cudnn.allow_tf32 = True
 
     print(f"\nstarting training: {EPOCHS} epochs, {BATCH_SIZE} batch size")
     print(f"total pixels in dataset: {len(dataset):,}")
@@ -129,15 +150,40 @@ def train():
         t0 = time.time()
 
         for _ in range(steps_per_epoch):
-            coords, targets = dataset.get_batch(BATCH_SIZE)
-            coords = coords.to(device)
-            targets = targets.to(device)
+            # active learning logic: sample way more pixels than needed.
+            # find the ones the model gets wrong, and only train on those.
+            oversample = 4
+            coords_big, targets_big = dataset.get_batch(BATCH_SIZE * oversample)
+            coords_big = coords_big.to(device)
+            targets_big = targets_big.to(device)
+            
+            with torch.no_grad():
+                with torch.amp.autocast('cuda', enabled=(device.type == 'cuda')):
+                    pred_big = model(coords_big)
+                    # compute unreduced loss to find exact error per pixel
+                    raw_loss = nn.functional.binary_cross_entropy_with_logits(
+                        pred_big, targets_big, reduction='none'
+                    ).squeeze(-1)
+            
+            # hard negative mining. take the hardest 90 percent.
+            hard_count = int(BATCH_SIZE * 0.9)
+            rand_count = BATCH_SIZE - hard_count
+            
+            _, hard_idx = torch.topk(raw_loss, hard_count)
+            
+            # fill the rest with random pixels to prevent catastrophic forgetting of the background.
+            rand_idx = torch.randint(0, BATCH_SIZE * oversample, (rand_count,), device=device)
+            
+            final_idx = torch.cat([hard_idx, rand_idx])
+            
+            coords = coords_big[final_idx]
+            targets = targets_big[final_idx]
 
             optimizer.zero_grad(set_to_none=True)
             
             # Automatic Mixed Precision (AMP) cuts memory usage in half and 
             # uses the GPU's Tensor Cores to nearly double training speed.
-            with torch.cuda.amp.autocast(enabled=(device.type == 'cuda')):
+            with torch.amp.autocast('cuda', enabled=(device.type == 'cuda')):
                 pred = model(coords)
                 # Model guesses wrong: function angry, function beats model.
                 # Model guesses right: function happy, function rewards model.
@@ -175,9 +221,21 @@ def train():
                 'target_w': TARGET_W,
                 'target_h': TARGET_H,
             }, checkpoint_path)
-            marker = ' * saved'
+            marker = ' * saved best'
         else:
             marker = ''
+
+        # always save latest checkpoint so we never lose progress
+        latest_path = os.path.join(CHECKPOINT_DIR, 'badapple_nn_latest.pt')
+        torch.save({
+            'epoch': epoch,
+            'model_state_dict': model.state_dict(),
+            'optimizer_state_dict': optimizer.state_dict(),
+            'loss': avg_loss,
+            'total_frames': total_frames,
+            'target_w': TARGET_W,
+            'target_h': TARGET_H,
+        }, latest_path)
 
         # \r to overwrite the progress bar cleanly
         print(f"\repoch {epoch:4d}/{EPOCHS} | loss: {avg_loss:.6f} | "

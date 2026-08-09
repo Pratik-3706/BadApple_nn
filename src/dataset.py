@@ -1,7 +1,7 @@
 """
 Dataset and coordinate grid utilities for model training.
 
-The model doesn't see "frames" — it sees coordinates. For any point
+The model doesn't see "frames" - it sees coordinates. For any point
 (t, x, y) in normalized space [-1, 1]^3, it predicts the brightness.
 This module handles the mapping between frame indices / pixel positions
 and those normalized coordinates.
@@ -34,7 +34,7 @@ class BadAppleDataset(Dataset):
         self.num_frames, self.H, self.W = self.frames.shape
         print(f"loaded {self.num_frames} frames, {self.H}x{self.W}")
 
-        # precompute the coordinate grids — we'll index into these
+        # precompute the coordinate grids - we'll index into these
         # x goes left-right [-1, 1], y goes top-bottom [-1, 1]
         xs = np.linspace(-1, 1, self.W, dtype=np.float32)
         ys = np.linspace(-1, 1, self.H, dtype=np.float32)
@@ -66,7 +66,7 @@ class BadAppleDataset(Dataset):
         self.frame_weights = diffs / diffs.sum()
 
     def __len__(self):
-        # not the real size — we sample randomly anyway.
+        # not the real size - we sample randomly anyway.
         # this just controls how many samples = "one epoch"
         return self.total_pixels
 
@@ -116,7 +116,7 @@ def make_inference_grid(frame_idx, total_frames, device='cpu'):
 
 
 if __name__ == '__main__':
-    # quick test — make sure the dataset loads and shapes are right
+    # quick test - make sure the dataset loads and shapes are right
     ds = BadAppleDataset()
     coords, target = ds[0]
     print(f"sample: coords={coords.shape}, target={target.shape}")

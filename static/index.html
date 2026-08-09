@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>BadApple × NN — Watch a Neural Network Think</title>
+    <title>BadApple × NN - Watch a Neural Network Think</title>
     <meta name="description" content="A neural network generates Bad Apple frames live while you watch its internal activations in real-time.">
     <link rel="stylesheet" href="/static/style.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -24,25 +24,34 @@
                     <span class="logo-icon">◉</span>
                     <h1>Bad<span class="text-thin">Apple</span> <span class="accent">×</span> <span class="text-bold">NN</span></h1>
                 </div>
-                <p class="tagline">live neural generation — real-time activation x-ray</p>
             </div>
 
             <div class="header-stats">
+                <div class="stat-pill model-selector-pill">
+                    <span class="stat-label">MODEL</span>
+                    <select id="model-mode-select" class="model-select">
+                        <option value="best">Best</option>
+                        <option value="latest">Latest</option>
+                        <option value="compare">Compare (Best vs Latest)</option>
+                        <option value="compare_real_best">Compare (Best vs Real)</option>
+                        <option value="compare_real_latest">Compare (Latest vs Real)</option>
+                    </select>
+                </div>
                 <div class="stat-pill" id="status-pill">
                     <span class="status-dot" id="status-dot"></span>
                     <span id="status-text">connecting</span>
                 </div>
                 <div class="stat-pill">
                     <span class="stat-label">FPS</span>
-                    <span class="stat-value" id="fps-display">—</span>
+                    <span class="stat-value" id="fps-display">-</span>
                 </div>
                 <div class="stat-pill">
                     <span class="stat-label">INF</span>
-                    <span class="stat-value" id="inference-display">— ms</span>
+                    <span class="stat-value" id="inference-display">- ms</span>
                 </div>
                 <div class="stat-pill">
                     <span class="stat-label">NET</span>
-                    <span class="stat-value" id="param-display">—</span>
+                    <span class="stat-value" id="param-display">-</span>
                 </div>
             </div>
         </div>
@@ -55,16 +64,32 @@
             <div class="panel-label">
                 <span class="panel-label-dot"></span>
                 Neural Video Output
-                <span class="live-badge">● LIVE</span>
+                <span class="model-tag" id="model-tag-main">BEST</span>
             </div>
             <div class="video-stage" id="video-stage">
                 <div class="video-frame">
                     <canvas id="video-canvas"></canvas>
                     <div class="scanline"></div>
                 </div>
-                <div class="video-overlay">
-                    <span class="frame-info" id="frame-counter">—</span>
+                <!-- second canvas for comparison mode, hidden by default -->
+                <div class="video-frame video-frame--compare" id="compare-frame" style="display:none">
+                    <canvas id="video-canvas-compare"></canvas>
+                    <div class="scanline"></div>
                 </div>
+                <!-- third frame for real video -->
+                <div class="video-frame video-frame--compare" id="real-frame" style="display:none">
+                    <video id="real-video" src="/api/video" muted playsinline style="width:100%; height:100%; object-fit:contain; display:block;"></video>
+                    <div class="scanline"></div>
+                </div>
+                <div class="video-overlay">
+                    <span class="frame-info" id="frame-counter">-</span>
+                </div>
+            </div>
+            <!-- comparison labels that appear in compare mode -->
+            <div class="compare-labels" id="compare-labels" style="display:none">
+                <span class="compare-label compare-label--best">BEST</span>
+                <span class="compare-label compare-label--latest">LATEST</span>
+                <span class="compare-label compare-label--real">REAL</span>
             </div>
             <div class="transport">
                 <button class="transport-btn" id="play-btn" title="Play / Pause (Space)">
@@ -97,10 +122,11 @@
             <div class="panel-label">
                 <span class="panel-label-dot panel-label-dot--net"></span>
                 Network Activations
-                <span class="hook-badge">⚡ HOOKED</span>
             </div>
             <div class="network-stage" id="network-container">
-                <svg id="network-svg"></svg>
+                <canvas id="connections-canvas" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none;"></canvas>
+                <canvas id="network-canvas" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%;"></canvas>
+                <svg id="network-svg" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none;"></svg>
             </div>
             <div class="network-footer">
                 <div class="colormap-legend">

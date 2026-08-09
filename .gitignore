@@ -2,9 +2,11 @@
 bad_apple_vid/audio.mp3
 bad_apple_vid/vid.mp4
 checkpoints/badapple_nn.pt
+checkpoints/badapple_nn_latest.pt
 data/frames.npy
 bad_apple_vid/extracted_frames/*.png
 train_outputs/
+colab_train.py
 
 # -- python junk --
 __pycache__/
