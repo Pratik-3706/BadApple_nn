@@ -127,6 +127,12 @@ class SineMLP(nn.Module):
 
 def build_model(device='cpu'):
     """Quick helper to build and move to device."""
+    
+    # Oops. The README used to brag about 1.8 million parameters, but 
+    # someone on GitHub correctly pointed out I hardcoded this to 256/5 here.
+    # It turns out the model only has 264K parameters! 
+    # The fact that it still memorized the video this well with 7x fewer 
+    # params is a total flex, so we're keeping it this way.
     model = SineMLP(
         in_features=3,
         out_features=1,
