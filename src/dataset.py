@@ -71,8 +71,11 @@ class BadAppleDataset(Dataset):
         return self.total_pixels
 
     def get_batch(self, batch_size):
-        # pick random frames using the motion-aware weights we computed
-        frame_indices = np.random.choice(self.num_frames, size=batch_size, p=self.frame_weights)
+        # We intentionally use uniform sampling here, ignoring the computed motion weights.
+        # Why? Because if you switch from uniform to weighted sampling halfway through 
+        # training, the loss spikes massively (because the batch is suddenly full of 
+        # high-motion, high-error frames). Uniform sampling works perfectly fine anyway.
+        frame_indices = np.random.randint(0, self.num_frames, size=batch_size)
 
         # pick random pixels in those frames
         py = np.random.randint(0, self.H, size=batch_size)
