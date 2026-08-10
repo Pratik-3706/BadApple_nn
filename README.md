@@ -41,7 +41,7 @@ Training uses `BCEWithLogitsLoss` instead of the more common `MSELoss` because B
 
 ## the web player
 
-Once trained, a FastAPI server runs the neural network live and streams the generated frames to a web browser over WebSocket. The left panel shows the video being generated in real-time. The right panel shows a live heatmap of every single neuron in every layer, so you can literally watch the network "think" as it draws each frame.
+Once trained, a FastAPI server runs the neural network live and streams the generated frames to a web browser over WebSocket. The left panel shows the video being generated in real-time. The right panel shows a live heatmap of every single neuron in every layer. To keep the visualization dynamic and fast, this heatmap specifically tracks the exact mathematical activations for the **dead-center pixel** of the video. You are watching 2,560 sine waves oscillate in real-time as the network calculates the center of the screen!
 
 The audio plays synced in the browser while the neural network generates the visuals at 29.9 fps. The inference engine natively utilizes FP16 precision on GPUs to trigger Tensor Cores, enabling perfectly smooth real-time generation even on massive frame grids. If the GPU still can't keep up, it'll drop frames to stay in sync rather than going slow-mo.
 
