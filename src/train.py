@@ -134,7 +134,7 @@ def train():
             print(f"failed to load checkpoint: {e}. starting fresh.")
             start_epoch = 1
 
-    # enable TF32 for a huge speedup on Ampere GPUs (like RTX 2050)
+    # enable TF32 for a huge speedup on Ampere GPUs 
     if torch.cuda.is_available():
         torch.backends.cuda.matmul.allow_tf32 = True
         torch.backends.cudnn.allow_tf32 = True
