@@ -43,9 +43,9 @@ class InferenceEngine:
         if checkpoint_path is None:
             checkpoint_path = CHECKPOINT_PATH
 
-        # force cuda - if it fails, we want it to crash with an error, not fall back to slow CPU
+        # automatically fallback to CPU if CUDA is unavailable
         if device is None:
-            device = torch.device('cuda')
+            device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         self.device = device
         print(f"inference engine using: {device}")
 

@@ -1,7 +1,7 @@
 # BadApple × NN
 A neural network that memorizes the entire Bad Apple music video and regenerates it live, frame by frame, from pure math. No video file, no frames on disk just ~1,050,000 learned numbers (weights) and a function that takes in `(time, x, y)` and spits out a pixel brightness.
 
-You give it a coordinate. It gives you a pixel. Do that 172,800 times and you get a frame. Do *that* 6,585 times and you get the whole video. The entire 3:39 music video lives inside a ~4.2MB file.
+You give it a coordinate. It gives you a pixel. Do that 172,800 times and you get a frame. Do *that* 6,505 times and you get the whole video. The entire 3:39 music video lives inside a ~4.02MB file.
 ---
 
 [![Hugging Face Models](https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Models-blue?style=for-the-badge)](https://huggingface.co/Pratik-3706/bad_epoch)
@@ -35,7 +35,7 @@ The architecture:
 - **Hidden layers**: 5 layers, 512 neurons each, all with `sin()` activations
 - **Output**: 1 value - pixel brightness (0 = black, 1 = white)
 - **omega_0**: 30.0 (controls how "detailed" the sine waves can get)
-- **Total params**: ~1.05M *(Recently widened from 256 to 512 for even sharper details)*
+- **Total params**: ~1.05M
 
 Training uses `BCEWithLogitsLoss` instead of the more common `MSELoss` because Bad Apple is essentially a binary video pixels are either black or white. BCE brutally punishes the network for predicting wishy-washy gray values, which forces it to commit to razor-sharp edges.
 

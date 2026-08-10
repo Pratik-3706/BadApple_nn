@@ -15,6 +15,9 @@ import cv2
 import os
 import sys
 import time
+from skimage.metrics import structural_similarity as ssim
+import sys
+import time
 
 sys.path.insert(0, os.path.dirname(__file__))
 from model import build_model
@@ -64,6 +67,7 @@ def evaluate():
     print(f"original frames: {original_frames.shape}")
 
     psnr_values = []
+    ssim_values = []
     t0 = time.time()
 
     print(f"\nreconstructing {total_frames} frames...")
@@ -78,7 +82,9 @@ def evaluate():
             original = original_frames[fi]
 
             frame_psnr = psnr(original, recon)
+            frame_ssim = ssim(original, recon, data_range=1.0)
             psnr_values.append(frame_psnr)
+            ssim_values.append(frame_ssim)
 
             # save comparison for a handful of frames
             if fi % 500 == 0 or fi == total_frames - 1:
@@ -91,16 +97,16 @@ def evaluate():
 
             if fi % 1000 == 0:
                 elapsed = time.time() - t0
-                print(f"  frame {fi:5d}/{total_frames} | PSNR: {frame_psnr:.1f} dB | {elapsed:.1f}s")
+                print(f"  frame {fi:5d}/{total_frames} | PSNR: {frame_psnr:.1f} dB | SSIM: {frame_ssim:.4f} | {elapsed:.1f}s")
 
     elapsed = time.time() - t0
     psnr_arr = np.array(psnr_values)
+    ssim_arr = np.array(ssim_values)
 
     print(f"\n{'='*50}")
     print(f"evaluation done in {elapsed:.1f}s")
-    print(f"  avg PSNR:  {psnr_arr.mean():.2f} dB")
-    print(f"  min PSNR:  {psnr_arr.min():.2f} dB (frame {psnr_arr.argmin()})")
-    print(f"  max PSNR:  {psnr_arr.max():.2f} dB (frame {psnr_arr.argmax()})")
+    print(f"Average PSNR: {psnr_arr.mean():.2f} dB (min: {psnr_arr.min():.2f}, max: {psnr_arr.max():.2f})")
+    print(f"Average SSIM: {ssim_arr.mean():.4f} (min: {ssim_arr.min():.4f}, max: {ssim_arr.max():.4f})")
     print(f"  std PSNR:  {psnr_arr.std():.2f} dB")
     print(f"  frames < 20 dB: {np.sum(psnr_arr < 20)}")
     print(f"  frames < 25 dB: {np.sum(psnr_arr < 25)}")
