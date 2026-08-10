@@ -16,8 +16,7 @@ import os
 import sys
 import time
 from skimage.metrics import structural_similarity as ssim
-import sys
-import time
+
 
 sys.path.insert(0, os.path.dirname(__file__))
 from model import build_model
