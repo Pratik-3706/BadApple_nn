@@ -94,12 +94,11 @@ class InferenceEngine:
         Attach forward hooks to every SineLayer in the network.
 
         Each hook captures the output of that layer - the raw activation
-        values produced by sin(omega * (Wx + b)). We reduce them to
-        per-neuron means (average across all spatial positions) to keep
-        the payload small enough to stream at 30fps.
+        values produced by sin(omega * (Wx + b)). Instead of averaging
+        across all pixels (which cancels out the sine waves to near-zero),
+        we extract the activations for the exact center pixel of the screen.
 
-        These are the REAL activations, not simulated. The exact numbers
-        that produced the frame you're looking at.
+        These are REAL activations, but represent exactly ONE pixel's computation.
         """
         self._hooks = []
         layer_idx = 0
@@ -119,15 +118,14 @@ class InferenceEngine:
 
         The hooks capture the raw tensor after sin(omega * Wx + b).
         During inference on a frame grid (480x360), this tensor is shape
-        [43200, 512]. We take the mean across pixels to get one value
-        per neuron: [512]. That's what goes to the frontend.
+        [172800, 512]. We extract the exact activations for the center pixel
+        (row 180, col 240) to send to the frontend.
         """
         def hook_fn(module, input, output):
             # detach from computation graph
-            # Instead of averaging across all 172,800 pixels (which makes the animation
-            # look static/zeroed-out), we take the mathematically exact activation
-            # of the neuron for the exact center pixel of the screen.
-            center_idx = output.shape[0] // 2
+            # True center pixel: row 180, col 240 -> index = 180 * 480 + 240 = 86640
+            # (Previously there was an off-by-240 bug picking row 180 col 0)
+            center_idx = (self.height // 2) * self.width + (self.width // 2)
             acts = output[center_idx].detach().cpu().numpy()
             self.activations[layer_name] = acts.tolist()
         return hook_fn

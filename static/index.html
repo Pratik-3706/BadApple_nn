@@ -69,11 +69,13 @@
             <div class="video-stage" id="video-stage">
                 <div class="video-frame">
                     <canvas id="video-canvas"></canvas>
+                    <div class="center-pixel-marker"></div>
                     <div class="scanline"></div>
                 </div>
                 <!-- second canvas for comparison mode, hidden by default -->
                 <div class="video-frame video-frame--compare" id="compare-frame" style="display:none">
                     <canvas id="video-canvas-compare"></canvas>
+                    <div class="center-pixel-marker"></div>
                     <div class="scanline"></div>
                 </div>
                 <!-- third frame for real video -->
@@ -121,7 +123,7 @@
         <section class="panel panel--network" id="network-panel">
             <div class="panel-label">
                 <span class="panel-label-dot panel-label-dot--net"></span>
-                Network Activations
+                Network Activations (Center Pixel)
             </div>
             <div class="network-stage" id="network-container">
                 <canvas id="connections-canvas" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none;"></canvas>
