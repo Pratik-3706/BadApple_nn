@@ -69,20 +69,14 @@
             <div class="video-stage" id="video-stage">
                 <div class="video-frame">
                     <canvas id="video-canvas"></canvas>
-                    <div class="scanline"></div>
                 </div>
                 <!-- second canvas for comparison mode, hidden by default -->
                 <div class="video-frame video-frame--compare" id="compare-frame" style="display:none">
                     <canvas id="video-canvas-compare"></canvas>
-                    <div class="scanline"></div>
                 </div>
                 <!-- third frame for real video -->
                 <div class="video-frame video-frame--compare" id="real-frame" style="display:none">
                     <video id="real-video" src="/api/video" muted playsinline style="width:100%; height:100%; object-fit:contain; display:block;"></video>
-                    <div class="scanline"></div>
-                </div>
-                <div class="video-overlay">
-                    <span class="frame-info" id="frame-counter">-</span>
                 </div>
             </div>
             <!-- comparison labels that appear in compare mode -->
@@ -105,6 +99,7 @@
                     <div class="seek-progress" id="seek-progress"></div>
                 </div>
                 <div class="transport-right">
+                    <span class="frame-info" id="frame-counter" style="margin-right: 15px;">-</span>
                     <div class="fps-dial">
                         <label>SPD</label>
                         <input type="range" id="fps-slider" min="1" max="60" value="30" class="fps-slider">

@@ -313,20 +313,7 @@ body {
     object-fit: contain; 
 }
 
-/* scanline overlay - removed */
-.scanline {
-    display: none;
-}
 
-.video-overlay {
-    position: absolute;
-    bottom: 4px;
-    left: 4px;
-    right: 4px;
-    display: flex;
-    justify-content: space-between;
-    pointer-events: none;
-}
 
 .frame-info {
     font-family: var(--font-mono);
