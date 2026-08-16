@@ -1,8 +1,8 @@
 """
 Post-training evaluation - checks how well the model actually learned the video.
 
-Run this after training finishes to see per-frame PSNR, worst frames,
-and generate a side-by-side comparison. If the numbers look bad,
+Run this after training to get per-frame PSNR/SSIM numbers and
+side-by-side comparison images. If the numbers look bad,
 train longer or bump up the model size.
 
 Usage:
@@ -74,7 +74,13 @@ def evaluate():
     with torch.no_grad():
         for fi in range(total_frames):
             grid = make_inference_grid(fi, total_frames, device=device)
-            pixels = model(grid)
+            logits = model(grid)
+
+            # the model outputs raw logits (trained with BCEWithLogitsLoss).
+            # i need to apply the same sigmoid(x * 4.0) that the inference
+            # engine uses, otherwise i'm comparing logits against [0,1] pixels
+            # and the metrics are garbage.
+            pixels = torch.sigmoid(logits * 4.0)
 
             # reshape to image
             recon = pixels.cpu().numpy().reshape(TARGET_H, TARGET_W)
@@ -104,17 +110,19 @@ def evaluate():
 
     print(f"\n{'='*50}")
     print(f"evaluation done in {elapsed:.1f}s")
-    print(f"Average PSNR: {psnr_arr.mean():.2f} dB (min: {psnr_arr.min():.2f}, max: {psnr_arr.max():.2f})")
-    print(f"Average SSIM: {ssim_arr.mean():.4f} (min: {ssim_arr.min():.4f}, max: {ssim_arr.max():.4f})")
+    print(f"  avg PSNR:  {psnr_arr.mean():.2f} dB (min: {psnr_arr.min():.2f}, max: {psnr_arr.max():.2f})")
+    print(f"  avg SSIM:  {ssim_arr.mean():.4f} (min: {ssim_arr.min():.4f}, max: {ssim_arr.max():.4f})")
     print(f"  std PSNR:  {psnr_arr.std():.2f} dB")
     print(f"  frames < 20 dB: {np.sum(psnr_arr < 20)}")
     print(f"  frames < 25 dB: {np.sum(psnr_arr < 25)}")
     print(f"  frames > 30 dB: {np.sum(psnr_arr > 30)}")
     print(f"\ncomparison images saved to {OUTPUT_DIR}")
 
-    # save PSNR curve as numpy for plotting later if needed
+    # save curves as numpy for plotting later if needed
     np.save(os.path.join(OUTPUT_DIR, 'psnr_curve.npy'), psnr_arr)
+    np.save(os.path.join(OUTPUT_DIR, 'ssim_curve.npy'), ssim_arr)
     print(f"PSNR curve saved to {os.path.join(OUTPUT_DIR, 'psnr_curve.npy')}")
+    print(f"SSIM curve saved to {os.path.join(OUTPUT_DIR, 'ssim_curve.npy')}")
 
 
 if __name__ == '__main__':

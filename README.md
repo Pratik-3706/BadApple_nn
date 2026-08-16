@@ -16,7 +16,7 @@ Download the pre-trained neural network weights instantly from Hugging Face and 
 
 Yeah so the idea is actually kind of stupid-simple:
 
-Instead of storing the video as a giant pile of pixel data, we teach a tiny neural network the *function* behind the video. Mathematically, Bad Apple is just a function:
+Instead of storing the video as a giant pile of pixel data, i teach a tiny neural network the *function* behind the video. Mathematically, Bad Apple is just a function:
 
 ```
 f(time, x, y) → brightness
@@ -24,7 +24,7 @@ f(time, x, y) → brightness
 
 A black pixel at the top-left corner of frame 1000? That's just `f(0.31, -1.0, -1.0) → 0.0`. A white pixel in the center of frame 3000? That's `f(0.92, 0.0, 0.0) → 1.0`. Every single pixel is just a point on this function.
 
-So we train a neural network to *become* that function. And then we throw away the video entirely.
+So i train a neural network to *become* that function. And then throw away the video entirely.
 
 ## how it actually works
 
@@ -36,21 +36,34 @@ The architecture:
 - **Output**: 1 value - pixel brightness (0 = black, 1 = white)
 - **omega_0**: 30.0 (controls how "detailed" the sine waves can get)
 - **Total params**: ~1.05M
+- **Total frames**: 6,505 @ 29.97 fps
 
 Training uses `BCEWithLogitsLoss` instead of the more common `MSELoss` because Bad Apple is essentially a binary video pixels are either black or white. BCE brutally punishes the network for predicting wishy-washy gray values, which forces it to commit to razor-sharp edges.
 
+## results
+
+**Best checkpoint**: epoch 380, loss 0.2434
+
+Here's what the neural network generates vs the real video frames (model | real):
+
+<img alt="Model vs Real - Frame comparison 1" src="https://github.com/user-attachments/assets/1455955c-99d5-4ad1-9dd1-166e85ed5792" />
+<img alt="Model vs Real - Frame comparison 2" src="https://github.com/user-attachments/assets/0f1755c9-11b5-4e25-b722-c64341aca818" />
+<img alt="Model vs Real - Frame comparison 3" src="https://github.com/user-attachments/assets/a71a95df-df4d-4cde-83dd-940d75b03221" />
+
+For full training history and what i changed along the way, see [TRAINING.md](TRAINING.md).
+
 ## the web player
 
-Once trained, a FastAPI server runs the neural network live and streams the generated frames to a web browser over WebSocket. The main panel shows the video being generated in real-time. The bottom panel shows a live heatmap of every single neuron in every layer. To keep the visualization dynamic and fast, this heatmap specifically tracks the exact mathematical activations for the **dead-center pixel** of the video. You are watching 2,560 sine waves oscillate in real-time as the network calculates the center of the screen!
+Once trained, a FastAPI server runs the neural network live and streams the generated frames to a web browser over WebSocket. The main panel shows the video being generated in real-time. The bottom panel shows a live heatmap of every single neuron in every layer. To keep the visualization dynamic and fast, this heatmap specifically tracks the exact mathematical activations for the **dead-center pixel** of the video. You're watching 2,560 sine waves oscillate in real-time as the network calculates the center of the screen.
 
-The audio plays synced in the browser while the neural network generates the visuals at 29.9 fps. The inference engine natively utilizes FP16 precision on GPUs to trigger Tensor Cores, enabling perfectly smooth real-time generation even on massive frame grids. If the GPU still can't keep up, it'll drop frames to stay in sync rather than going slow-mo.
+The audio plays synced in the browser while the neural network generates the visuals at 29.97 fps. The inference engine uses FP16 precision on GPUs to hit Tensor Cores, so real-time generation runs smooth even on massive frame grids. If the GPU still can't keep up, it drops frames to stay in sync rather than going slow-mo.
 
 ## running it yourself
 
 ### prerequisites
 
 - Python 3.10+
-- An NVIDIA GPU with CUDA (I tortured an RTX 2050 for this. If yours is better, it will simply suffer less)
+- An NVIDIA GPU with CUDA (i tortured an RTX 2050 for this. If yours is better, it will simply suffer less)
 - The Bad Apple video (put it in `bad_apple_vid/vid.mp4`)
 
 ### setup
@@ -101,7 +114,7 @@ src/
   extract_frames.py  - rips frames from the video into a numpy array
   inference_engine.py- runs the trained model live, captures layer activations
   server.py          - FastAPI + WebSocket server for real-time streaming
-  evaluate.py        - SSIM/PSNR quality metrics
+  evaluate.py        - SSIM/PSNR quality metrics (run after training)
 
 static/
   index.html         - the web player UI
